@@ -1,23 +1,31 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { Role } from './auth.enum';
-import { BehaviorSubject, Observable, catchError, filter, flatMap, map, mergeMap, tap, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, filter, map, mergeMap, tap, throwError } from 'rxjs';
 import { IUser, User } from '../user/user/user';
-import { decode } from 'jsonwebtoken';
 import { transformError } from '../common/common';
+import { CacheService } from '../common/cache.service';
+import { decode } from 'jsonwebtoken';
+
+export const JwtTokenKey: string = 'jwt';
 
 @Injectable({
     providedIn: 'root'
 })
 export abstract class AuthService implements IAuthService {
+    protected readonly cache = inject(CacheService);
+
     readonly authStatus$: BehaviorSubject<IAuthStatus> = new BehaviorSubject<IAuthStatus>(defaultAuthStatus);
     readonly currentUser$: BehaviorSubject<IUser> = new BehaviorSubject<IUser>(new User());
 
     constructor() { }
 
     login(email: string, password: string): Observable<void> {
+        this.clearToken();
+
         const loginResponse$ = this.authProvider(email, password).pipe(
-            map((value) => {
-                const token = decode(value.accessToken);
+            map((authResponse) => {
+                this.setToken(authResponse.accessToken);
+                const token = decode(authResponse.accessToken);
                 return this.transformJwtToken(token);
             }),
             tap((status) => this.authStatus$.next(status)),
@@ -39,6 +47,10 @@ export abstract class AuthService implements IAuthService {
     }
 
     logout(clearToken?: boolean | undefined): void {
+        if (clearToken) {
+            this.clearToken();
+        }
+
         // Delay before timeout is 0 to ensure this gets called almost immediately, without
         // directly requiring it to happen in sync with the program.
         // This also allows us to avoid timing issues for when code elements of the application
@@ -47,7 +59,15 @@ export abstract class AuthService implements IAuthService {
     }
 
     getToken(): string {
-        throw new Error('Method not implemented.');
+        return this.cache.getItem(JwtTokenKey)!;
+    }
+
+    protected setToken(jwt: string) {
+        this.cache.setItem(JwtTokenKey, jwt);
+    }
+
+    protected clearToken(): void {
+        this.cache.removeItem(JwtTokenKey);
     }
 
     protected abstract authProvider(email: string, password: string): Observable<IServerAuthResponse>;
