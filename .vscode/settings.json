@@ -1,7 +1,7 @@
 {
   "debug.openExplorerOnEnd": true,
-  "editor.tabSize": 2,
-  "editor.rulers": [90],
+  "editor.tabSize": 4,
+  "editor.rulers": [120],
   "editor.cursorBlinking": "solid",
   "editor.formatOnType": false,
   "editor.formatOnPaste": false,
@@ -58,7 +58,7 @@
   "editor.autoIndent": "full",
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "[html]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "vscode.html-language-features"
   },
   "[shellscript]": {
     "editor.defaultFormatter": "foxundermoon.shell-format"
