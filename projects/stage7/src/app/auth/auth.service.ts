@@ -4,7 +4,7 @@ import { BehaviorSubject, Observable, catchError, filter, map, mergeMap, tap, th
 import { IUser, User } from '../user/user/user';
 import { transformError } from '../common/common';
 import { CacheService } from '../common/cache.service';
-import { decode } from 'jsonwebtoken';
+import { jwtDecode as decode } from 'jwt-decode';
 
 export const JwtTokenKey: string = 'jwt';
 
