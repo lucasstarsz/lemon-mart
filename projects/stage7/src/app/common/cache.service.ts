@@ -5,19 +5,23 @@ import { Injectable } from "@angular/core";
  */
 @Injectable({ providedIn: 'root' })
 export class CacheService {
-    public getItem<T>(key: string): T | null {
+    public getItem<T>(key: string, needsJSONParsing: boolean = true): T | null {
         const data = localStorage.getItem(key);
 
-        if (data != null) {
+        if (data == null) {
+            return null;
+        }
+
+        if (needsJSONParsing) {
             try {
                 return JSON.parse(data);
             } catch (error) {
                 console.error('Parsing error', error);
                 return null;
             }
+        } else {
+            return data as T;
         }
-
-        return null;
     }
 
     public setItem(key: string, data: object | string): void {

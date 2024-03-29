@@ -1,6 +1,6 @@
-import { Injectable, inject } from '@angular/core';
+import { inject } from '@angular/core';
 import { Role } from './auth.enum';
-import { BehaviorSubject, Observable, catchError, filter, map, mergeMap, tap, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, filter, map, mergeMap, pipe, tap, throwError } from 'rxjs';
 import { IUser, User } from '../user/user/user';
 import { transformError } from '../common/common';
 import { CacheService } from '../common/cache.service';
@@ -8,16 +8,34 @@ import { jwtDecode as decode } from 'jwt-decode';
 
 export const JwtTokenKey: string = 'jwt';
 
-@Injectable({
-    providedIn: 'root'
-})
 export abstract class AuthService implements IAuthService {
-    protected readonly cache = inject(CacheService);
+
+    private getAndUpdateUserIfAuthenticated = pipe(
+        filter((status: IAuthStatus) => status.isAuthenticated),
+        // flatMap is deprecated, renamed to mergeMap
+        mergeMap(() => this.getCurrentUser()),
+        map((user: IUser) => this.currentUser$.next(user)),
+        catchError(transformError)
+    );
 
     readonly authStatus$: BehaviorSubject<IAuthStatus> = new BehaviorSubject<IAuthStatus>(defaultAuthStatus);
     readonly currentUser$: BehaviorSubject<IUser> = new BehaviorSubject<IUser>(new User());
 
-    constructor() { }
+    protected readonly cache = inject(CacheService);
+    protected readonly resumeCurrentUser$ = this.authStatus$.pipe(this.getAndUpdateUserIfAuthenticated);
+
+    constructor() {
+        if (this.hasExpiredToken()) {
+            this.logout(true);
+        } else {
+            this.authStatus$.next(this.getAuthStatusFromToken());
+
+            // To load user on browser refresh,
+            // resume pipeline must activate on the next cycle
+            // Which allows for all services to constructed properly
+            setTimeout(() => this.resumeCurrentUser$.subscribe(), 0);
+        }
+    }
 
     login(email: string, password: string): Observable<void> {
         this.clearToken();
@@ -25,15 +43,10 @@ export abstract class AuthService implements IAuthService {
         const loginResponse$ = this.authProvider(email, password).pipe(
             map((authResponse) => {
                 this.setToken(authResponse.accessToken);
-                const token = decode(authResponse.accessToken);
-                return this.transformJwtToken(token);
+                return this.getAuthStatusFromToken();
             }),
             tap((status) => this.authStatus$.next(status)),
-            filter((status: IAuthStatus) => status.isAuthenticated),
-            // flatMap is deprecated, renamed to mergeMap
-            mergeMap(() => this.getCurrentUser()),
-            map(user => this.currentUser$.next(user)),
-            catchError(transformError)
+            this.getAndUpdateUserIfAuthenticated
         );
 
         loginResponse$.subscribe({
@@ -59,7 +72,7 @@ export abstract class AuthService implements IAuthService {
     }
 
     getToken(): string {
-        return this.cache.getItem(JwtTokenKey)!;
+        return this.cache.getItem<string>(JwtTokenKey, false)!;
     }
 
     protected setToken(jwt: string) {
@@ -68,6 +81,21 @@ export abstract class AuthService implements IAuthService {
 
     protected clearToken(): void {
         this.cache.removeItem(JwtTokenKey);
+    }
+
+    protected hasExpiredToken(): boolean {
+        const jwt = this.getToken();
+
+        if (jwt) {
+            const payload = decode(jwt) as any;
+            return Date.now() >= payload.exp * 1000;
+        }
+
+        return true;
+    }
+
+    protected getAuthStatusFromToken(): IAuthStatus {
+        return this.transformJwtToken(decode(this.getToken()));
     }
 
     protected abstract authProvider(email: string, password: string): Observable<IServerAuthResponse>;
